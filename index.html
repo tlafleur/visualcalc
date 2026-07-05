@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Dot Machine</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sky:#EDF3FA;
+    --card:#FFFFFF;
+    --ink:#2B3243;
+    --ink-soft:#7A849B;
+    --sets:#FF8A3D;      /* first number: how many sets */
+    --sets-soft:#FFE7D4;
+    --objects:#3D8BFF;   /* second number: objects in a set */
+    --objects-soft:#DCEAFF;
+    --result:#22B573;    /* the answer */
+    --result-soft:#D8F3E6;
+    --locked:#A9B2C2;
+    --key:#FFFFFF;
+    --key-press:#E8EEF7;
+    --radius:20px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; overscroll-behavior:none;}
+  body{
+    font-family:'Fredoka', system-ui, sans-serif;
+    background:var(--sky);
+    color:var(--ink);
+    display:flex; flex-direction:column;
+    padding:clamp(8px,1.5vmin,16px);
+    gap:clamp(8px,1.2vmin,14px);
+    user-select:none; -webkit-user-select:none;
+    touch-action:manipulation;
+  }
+
+  /* ---------- viz canvas ---------- */
+  #vizWrap{
+    flex:1 1 0; min-height:0; position:relative;
+    background:var(--card);
+    border-radius:var(--radius);
+    box-shadow:0 2px 0 rgba(43,50,67,.06);
+    overflow:hidden;
+  }
+  #viz{position:absolute; inset:0; width:100%; height:100%;}
+  #vizMsg{
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:6px;
+    text-align:center; padding:24px; pointer-events:none;
+    font-size:clamp(20px,3.2vmin,30px); font-weight:600; color:var(--ink-soft);
+    opacity:0; transition:opacity .25s;
+  }
+  #vizMsg.show{opacity:1;}
+  #vizMsg .big{font-size:clamp(34px,6vmin,60px); color:var(--ink);}
+
+  /* ---------- equation row ---------- */
+  #eqRow{
+    display:flex; align-items:center; justify-content:center;
+    gap:clamp(6px,1vmin,12px); flex:0 0 auto;
+  }
+  .chip{
+    min-width:clamp(64px,9vmin,96px); padding:clamp(6px,1vmin,10px) clamp(12px,1.6vmin,18px);
+    border-radius:16px; text-align:center;
+    font-size:clamp(30px,5vmin,48px); font-weight:700; line-height:1.1;
+    background:var(--card); border:4px solid transparent;
+    transition:transform .15s, border-color .2s, background .2s;
+  }
+  .chip.empty{color:#C6CDDA;}
+  .chip.a{border-color:var(--sets); color:var(--sets); background:var(--sets-soft);}
+  .chip.a.empty{color:#EFC4A4; background:#FFF3EA;}
+  .chip.b{border-color:var(--objects); color:var(--objects); background:var(--objects-soft);}
+  .chip.b.empty{color:#B4CDF3; background:#EFF5FF;}
+  .chip.res{border-color:var(--result); color:var(--result); background:var(--result-soft); min-width:clamp(80px,11vmin,140px);}
+  .chip.res.empty{color:#B7E3CC; background:#EFFAF4;}
+  .chip.opchip{border-color:var(--ink); color:var(--ink); background:#fff; min-width:clamp(52px,7vmin,72px);}
+  .chip.opchip.empty{color:#C6CDDA; border-color:#E1E6EF;}
+  .eqSign{font-size:clamp(30px,5vmin,48px); font-weight:700; color:var(--ink-soft);}
+  #swapBtn{
+    border:none; background:var(--card); color:var(--ink);
+    width:clamp(48px,6.5vmin,64px); height:clamp(48px,6.5vmin,64px);
+    border-radius:50%; font-size:clamp(22px,3.4vmin,32px);
+    box-shadow:0 2px 0 rgba(43,50,67,.1); cursor:pointer;
+    transition:transform .3s;
+  }
+  #swapBtn:active{transform:rotate(180deg) scale(.94); background:var(--key-press);}
+  #swapBtn:focus-visible{outline:3px solid var(--objects); outline-offset:2px;}
+  #swapBtn[disabled]{opacity:.35;}
+
+  /* ---------- bottom panel ---------- */
+  #bottom{
+    flex:0 0 auto; display:flex; gap:clamp(8px,1.2vmin,14px);
+    height:clamp(220px,34vmin,320px);
+  }
+  #leftPane{flex:1 1 0; display:flex; flex-direction:column; gap:clamp(8px,1.2vmin,12px); min-width:0;}
+  #ops{display:grid; grid-template-columns:1fr 1fr; gap:clamp(8px,1.2vmin,12px); flex:1;}
+  .opBtn{
+    border:4px solid #E1E6EF; border-radius:var(--radius);
+    background:var(--key); color:var(--ink); cursor:pointer;
+    font-family:inherit; font-weight:600;
+    font-size:clamp(20px,3vmin,30px);
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    transition:transform .1s, border-color .2s, background .2s;
+  }
+  .opBtn .sym{font-size:clamp(28px,4.2vmin,42px); font-weight:700;}
+  .opBtn:active{transform:scale(.96);}
+  .opBtn:focus-visible{outline:3px solid var(--objects); outline-offset:2px;}
+  .opBtn.sel{border-color:var(--ink); background:#FFF6D9;}
+  .opBtn.lockBtn{color:var(--locked); border-style:dashed;}
+  #strip{
+    flex:0 0 auto; background:var(--card); border-radius:var(--radius);
+    padding:clamp(10px,1.6vmin,16px) clamp(14px,2vmin,22px);
+    font-size:clamp(18px,2.8vmin,28px); font-weight:600;
+    min-height:clamp(52px,8vmin,76px);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    box-shadow:0 2px 0 rgba(43,50,67,.06);
+  }
+  #strip .cA{color:var(--sets);} #strip .cB{color:var(--objects);} #strip .cR{color:var(--result);}
+
+  #keys{
+    flex:0 0 auto; display:grid;
+    grid-template-columns:repeat(3, clamp(64px,9.5vmin,96px));
+    grid-auto-rows:1fr; gap:clamp(8px,1.2vmin,12px);
+  }
+  .key{
+    border:none; border-radius:var(--radius); background:var(--key);
+    font-family:inherit; font-size:clamp(28px,4.4vmin,44px); font-weight:600; color:var(--ink);
+    box-shadow:0 3px 0 rgba(43,50,67,.12); cursor:pointer;
+    transition:transform .08s, background .1s;
+  }
+  .key:active{transform:translateY(2px); box-shadow:0 1px 0 rgba(43,50,67,.12); background:var(--key-press);}
+  .key:focus-visible{outline:3px solid var(--objects); outline-offset:2px;}
+  .key.ac{color:#E0524D; font-size:clamp(22px,3.4vmin,34px);}
+  .key.back{font-size:clamp(24px,3.8vmin,38px);}
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;}
+  }
+  @media (orientation:portrait){
+    #bottom{flex-direction:column; height:auto;}
+    #keys{grid-template-columns:repeat(3,1fr);}
+    .key{padding:clamp(10px,2vmin,16px) 0;}
+  }
+</style>
+</head>
+<body>
+
+  <div id="vizWrap">
+    <canvas id="viz"></canvas>
+    <div id="vizMsg"></div>
+  </div>
+
+  <div id="eqRow">
+    <div class="chip a empty" id="chipA">?</div>
+    <div class="chip opchip empty" id="chipOp">·</div>
+    <div class="chip b empty" id="chipB">?</div>
+    <div class="eqSign">=</div>
+    <div class="chip res empty" id="chipR">?</div>
+    <button id="swapBtn" aria-label="Swap the two numbers" title="Swap!">⇄</button>
+  </div>
+
+  <div id="bottom">
+    <div id="leftPane">
+      <div id="ops">
+        <button class="opBtn" data-op="+"><span class="sym" style="color:var(--result)">+</span> plus</button>
+        <button class="opBtn" data-op="*"><span class="sym" style="color:var(--sets)">×</span> times</button>
+        <button class="opBtn" data-op="-"><span class="sym" style="color:#E0524D">−</span> minus</button>
+        <button class="opBtn lockBtn" data-op="/"><span class="sym">🔒</span> divide</button>
+      </div>
+      <div id="strip">Tap a number to make some dots!</div>
+    </div>
+    <div id="keys">
+      <button class="key" data-d="7">7</button><button class="key" data-d="8">8</button><button class="key" data-d="9">9</button>
+      <button class="key" data-d="4">4</button><button class="key" data-d="5">5</button><button class="key" data-d="6">6</button>
+      <button class="key" data-d="1">1</button><button class="key" data-d="2">2</button><button class="key" data-d="3">3</button>
+      <button class="key ac" data-act="ac">AC</button><button class="key" data-d="0">0</button><button class="key back" data-act="back">⌫</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const MAX_DIGITS = 3;
+  const CSS = getComputedStyle(document.documentElement);
+  const C = {
+    sets: CSS.getPropertyValue('--sets').trim(),
+    setsSoft: CSS.getPropertyValue('--sets-soft').trim(),
+    objects: CSS.getPropertyValue('--objects').trim(),
+    result: CSS.getPropertyValue('--result').trim(),
+    ink: CSS.getPropertyValue('--ink').trim(),
+    inkSoft: CSS.getPropertyValue('--ink-soft').trim(),
+    cross:'#E0524D'
+  };
+  const fmt = n => n.toLocaleString('en-US');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- state ----------
+  let state = { a:'', op:null, b:'' };
+
+  // ---------- elements ----------
+  const canvas = document.getElementById('viz');
+  const ctx = canvas.getContext('2d');
+  const vizMsg = document.getElementById('vizMsg');
+  const chipA = document.getElementById('chipA');
+  const chipB = document.getElementById('chipB');
+  const chipOp = document.getElementById('chipOp');
+  const chipR = document.getElementById('chipR');
+  const strip = document.getElementById('strip');
+  const swapBtn = document.getElementById('swapBtn');
+  const OP_SYM = {'+':'+','-':'−','*':'×','/':'÷'};
+
+  // ---------- input ----------
+  document.getElementById('keys').addEventListener('click', e => {
+    const k = e.target.closest('.key'); if(!k) return;
+    if(k.dataset.act === 'ac'){ state = {a:'', op:null, b:''}; }
+    else if(k.dataset.act === 'back'){
+      if(state.b) state.b = state.b.slice(0,-1);
+      else if(state.op) state.op = null;
+      else state.a = state.a.slice(0,-1);
+    } else {
+      const d = k.dataset.d;
+      const tgt = state.op ? 'b' : 'a';
+      if(state[tgt].length < MAX_DIGITS){
+        state[tgt] = (state[tgt] === '0') ? d : state[tgt] + d;
+      }
+    }
+    render();
+  });
+
+  document.getElementById('ops').addEventListener('click', e => {
+    const b = e.target.closest('.opBtn'); if(!b) return;
+    const op = b.dataset.op;
+    if(op === '/'){ lockedFlash(); return; }
+    if(state.a === '') state.a = '0';
+    state.op = op;
+    render();
+  });
+
+  let lockTimer;
+  function lockedFlash(){
+    strip.innerHTML = '🔒 Dividing is <b>coming soon</b>!';
+    clearTimeout(lockTimer);
+    lockTimer = setTimeout(render, 2200);
+  }
+
+  swapBtn.addEventListener('click', () => {
+    if(state.a === '' && state.b === '') return;
+    [state.a, state.b] = [state.b || '', state.a || ''];
+    if(state.a === '' && state.b !== ''){ state.a = state.b; state.b=''; }
+    render();
+  });
+
+  // ---------- render ----------
+  function num(s){ return s === '' ? null : parseInt(s,10); }
+
+  function render(){
+    clearTimeout(lockTimer);
+    const a = num(state.a), b = num(state.b), op = state.op;
+
+    setChip(chipA,'a', a===null ? null : fmt(a));
+    setChip(chipOp,'opchip', op ? OP_SYM[op] : null, '·');
+    setChip(chipB,'b', b===null ? null : fmt(b));
+
+    let result = null, sentence = '';
+    if(a !== null && op && b !== null){
+      if(op==='+'){ result = a+b;
+        sentence = `<span class="cA">${fmt(a)}</span> and <span class="cB">${fmt(b)}</span> together make <span class="cR">${fmt(result)}</span>!`; }
+      if(op==='*'){ result = a*b;
+        sentence = `<span class="cA">${fmt(a)} ${a===1?'set':'sets'}</span> of <span class="cB">${fmt(b)}</span> makes <span class="cR">${fmt(result)}</span>!`; }
+      if(op==='-'){
+        if(b > a){ result = null;
+          sentence = `You only have <span class="cA">${fmt(a)}</span> — you can't take away <span class="cB">${fmt(b)}</span>!`; }
+        else { result = a-b;
+          sentence = `Start with <span class="cA">${fmt(a)}</span>, take away <span class="cB">${fmt(b)}</span> — <span class="cR">${fmt(result)}</span> left!`; }
+      }
+    } else if(a !== null && op){
+      sentence = op==='*' ? `<span class="cA">${fmt(a)} ${a===1?'set':'sets'}</span> of… how many?`
+               : `<span class="cA">${fmt(a)}</span> ${OP_SYM[op]} … pick another number!`;
+    } else if(a !== null){
+      sentence = `That's <span class="cA">${fmt(a)}</span> ${a===1?'dot':'dots'}! Now pick <b>plus</b>, <b>minus</b>, or <b>times</b>.`;
+    } else {
+      sentence = 'Tap a number to make some dots!';
+    }
+
+    setChip(chipR,'res', result===null ? null : fmt(result));
+    strip.innerHTML = sentence;
+    swapBtn.disabled = !(a !== null && b !== null);
+    draw(a, op, b, result);
+  }
+
+  function setChip(el, base, val, placeholder='?'){
+    el.className = 'chip ' + base + (val===null ? ' empty' : '');
+    el.textContent = val===null ? placeholder : val;
+  }
+
+  // ---------- canvas ----------
+  function sizeCanvas(){
+    const r = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(r.width*dpr);
+    canvas.height = Math.round(r.height*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {w:r.width, h:r.height};
+  }
+  window.addEventListener('resize', () => render());
+
+  let animToken = 0;
+  function draw(a, op, b, result){
+    const {w,h} = sizeCanvas();
+    ctx.clearRect(0,0,w,h);
+    vizMsg.classList.remove('show');
+    animToken++;
+
+    const pad = Math.max(16, w*0.02);
+    const box = {x:pad, y:pad, w:w-2*pad, h:h-2*pad};
+
+    if(a === null){ drawWelcome(box); return; }
+
+    if(op === '*' && b !== null){ drawTimes(a, b, box); return; }
+    if(op === '+' && b !== null){ drawDots(box, [{n:a, color:C.sets},{n:b, color:C.objects}]); return; }
+    if(op === '-' && b !== null){
+      if(b > a){ bigMessage(`🙈`, `You only have ${fmt(a)}!`); drawDots(box, [{n:a, color:C.sets}]); return; }
+      drawDots(box, [{n:a-b, color:C.sets},{n:b, color:C.objects, crossed:true}]);
+      return;
+    }
+    // just one number (counting mode)
+    drawDots(box, [{n:a, color:C.sets}]);
+  }
+
+  function drawWelcome(box){
+    // a few friendly ghost dots
+    ctx.save();
+    ctx.globalAlpha = .18;
+    const demo = [C.sets, C.objects, C.result, C.sets, C.objects];
+    demo.forEach((col,i)=>{
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(box.x + box.w*(.2 + .15*i), box.y + box.h*.5 + Math.sin(i*1.7)*box.h*.12, Math.min(box.w,box.h)*.06, 0, 7);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function bigMessage(emoji, text, sub){
+    vizMsg.innerHTML = `<div class="big">${emoji}</div><div>${text}</div>` + (sub?`<div style="font-size:.7em">${sub}</div>`:'');
+    vizMsg.classList.add('show');
+  }
+
+  // Lay out `count` items in a grid inside (x,y,w,h); returns {cols,rows,cell}
+  function gridFit(count, w, h){
+    if(count<=0) return {cols:0, rows:0, cell:0};
+    let cols = Math.max(1, Math.round(Math.sqrt(count * w / Math.max(h,1))));
+    let rows = Math.ceil(count/cols);
+    // nudge to minimize wasted aspect
+    while(cols>1 && (cols-1)*Math.ceil(count/(cols-1)) <= cols*rows){ const c=cols-1, r=Math.ceil(count/c); if(Math.min(w/c,h/r) >= Math.min(w/cols,h/rows)){cols=c;rows=r;} else break; }
+    const cell = Math.min(w/cols, h/rows);
+    return {cols, rows, cell};
+  }
+
+  // Unified dot field: groups = [{n, color, crossed}]
+  function drawDots(box, groups){
+    const total = groups.reduce((s,g)=>s+g.n, 0);
+    if(total === 0){ bigMessage('🫧','Zero dots — all gone!'); return; }
+    const {cols, rows, cell} = gridFit(total, box.w, box.h);
+    const r = cell*0.36;
+
+    if(r < 1.1){ // too many to draw individually
+      drawDenseField(box, groups, total);
+      return;
+    }
+    const ox = box.x + (box.w - cols*cell)/2;
+    const oy = box.y + (box.h - rows*cell)/2;
+
+    const items = [];
+    let idx = 0;
+    groups.forEach(g => { for(let i=0;i<g.n;i++){ items.push({i:idx++, color:g.color, crossed:!!g.crossed}); } });
+
+    const token = animToken;
+    const animate = !reduceMotion && total <= 400;
+    const batch = animate ? Math.max(1, Math.ceil(total/24)) : total;
+    let drawn = 0;
+
+    function step(){
+      if(token !== animToken) return;
+      const end = Math.min(items.length, drawn + batch);
+      for(; drawn<end; drawn++){
+        const it = items[drawn];
+        const cx = ox + (it.i % cols)*cell + cell/2;
+        const cy = oy + Math.floor(it.i/cols)*cell + cell/2;
+        ctx.fillStyle = it.color;
+        ctx.globalAlpha = it.crossed ? .35 : 1;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+        if(it.crossed){
+          ctx.strokeStyle = C.cross; ctx.lineWidth = Math.max(2, r*0.32); ctx.lineCap='round';
+          const k = r*0.85;
+          ctx.beginPath();
+          ctx.moveTo(cx-k, cy-k); ctx.lineTo(cx+k, cy+k);
+          ctx.moveTo(cx+k, cy-k); ctx.lineTo(cx-k, cy+k);
+          ctx.stroke();
+        }
+      }
+      if(drawn < items.length) requestAnimationFrame(step);
+    }
+    step();
+  }
+
+  // For huge totals: draw as dense pixel field + banner
+  function drawDenseField(box, groups, total){
+    const {cols, rows, cell} = gridFit(total, box.w, box.h);
+    const ox = box.x + (box.w - cols*cell)/2;
+    const oy = box.y + (box.h - rows*cell)/2;
+    let idx = 0;
+    groups.forEach(g => {
+      ctx.fillStyle = g.color;
+      ctx.globalAlpha = g.crossed ? .3 : .9;
+      for(let i=0;i<g.n;i++,idx++){
+        ctx.fillRect(ox + (idx%cols)*cell, oy + Math.floor(idx/cols)*cell, Math.max(cell*.8,.6), Math.max(cell*.8,.6));
+      }
+    });
+    ctx.globalAlpha = 1;
+    banner(box, `${fmt(total)} dots — so tiny they look like sand!`);
+  }
+
+  // Multiplication: a set-boxes each holding b dots
+  function drawTimes(a, b, box){
+    if(a===0 || b===0){
+      if(a===0){ bigMessage('🫧','Zero sets means zero dots!'); return; }
+      // a sets of 0: draw empty boxes
+    }
+    const gap = Math.max(6, Math.min(box.w,box.h)*0.015);
+    const g = gridFit(a, box.w, box.h);
+    const setSize = g.cell - gap;
+    if(setSize < 7){ // way too many sets to show as boxes
+      drawDenseField(box, [{n:a*b, color:C.objects}], a*b);
+      return;
+    }
+    const ox = box.x + (box.w - g.cols*g.cell)/2;
+    const oy = box.y + (box.h - g.rows*g.cell)/2;
+
+    // dots inside one set
+    const innerPad = setSize*0.12;
+    const inner = setSize - innerPad*2;
+    const dg = gridFit(b, inner, inner);
+    const dr = dg.cell*0.36;
+    const drawInnerDots = dr >= 1.0 && b>0;
+
+    const token = animToken;
+    const animate = !reduceMotion && a <= 60 && a*b <= 400;
+    let i = 0;
+    const batch = animate ? Math.max(1, Math.ceil(a/16)) : a;
+
+    function drawSet(idx){
+      const sx = ox + (idx % g.cols)*g.cell + gap/2;
+      const sy = oy + Math.floor(idx/g.cols)*g.cell + gap/2;
+      // set box (first-number color)
+      ctx.fillStyle = C.setsSoft;
+      ctx.strokeStyle = C.sets;
+      ctx.lineWidth = Math.max(1.5, setSize*0.045);
+      roundRect(sx, sy, setSize, setSize, Math.min(10, setSize*0.18));
+      ctx.fill(); ctx.stroke();
+      if(drawInnerDots){
+        const ix = sx + innerPad + (inner - dg.cols*dg.cell)/2;
+        const iy = sy + innerPad + (inner - dg.rows*dg.cell)/2;
+        ctx.fillStyle = C.objects;
+        for(let d=0; d<b; d++){
+          ctx.beginPath();
+          ctx.arc(ix + (d%dg.cols)*dg.cell + dg.cell/2, iy + Math.floor(d/dg.cols)*dg.cell + dg.cell/2, dr, 0, 7);
+          ctx.fill();
+        }
+      } else if(b>0){
+        // too small for dots: solid blue fill hint
+        ctx.fillStyle = C.objects;
+        ctx.globalAlpha = .55;
+        roundRect(sx+innerPad, sy+innerPad, inner, inner, Math.min(6, inner*0.2));
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+    function step(){
+      if(token !== animToken) return;
+      const end = Math.min(a, i+batch);
+      for(; i<end; i++) drawSet(i);
+      if(i < a) requestAnimationFrame(step);
+      else if(!drawInnerDots && b>0) banner(box, `${fmt(a*b)} dots — too many to draw one by one!`);
+    }
+    step();
+  }
+
+  function banner(box, text){
+    const bw = Math.min(box.w*0.8, 640), bh = 44;
+    const bx = box.x + (box.w-bw)/2, by = box.y + box.h - bh - 4;
+    ctx.fillStyle = 'rgba(43,50,67,.85)';
+    roundRect(bx,by,bw,bh,14); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `600 ${Math.min(20, bw/ (text.length*0.55))}px Fredoka, sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(text, bx+bw/2, by+bh/2+1);
+  }
+
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
