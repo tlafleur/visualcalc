@@ -84,6 +84,7 @@
   .chip.b{border-color:var(--objects); color:var(--objects); background:var(--objects-soft);}
   .chip.b.empty{color:#B4CDF3; background:#EFF5FF;}
   .chip.res{border-color:var(--result); color:var(--result); background:var(--result-soft); min-width:clamp(80px,11vmin,140px);}
+  .chip.res.neg{border-color:#E0524D; color:#E0524D; background:#FCE7E5;}
   .chip.res.empty{color:#B7E3CC; background:#EFFAF4;}
   .chip.opchip{border-color:var(--ink); color:var(--ink); background:#fff; min-width:clamp(52px,7vmin,72px);}
   .chip.opchip.empty{color:#C6CDDA; border-color:#E1E6EF;}
@@ -124,7 +125,6 @@
   .opBtn:active{transform:scale(.96);}
   .opBtn:focus-visible{outline:3px solid var(--objects); outline-offset:2px;}
   .opBtn.sel{border-color:var(--ink); background:#FFF6D9;}
-  .opBtn.lockBtn{color:var(--locked); border-style:dashed;}
   #strip{
     flex:0 0 auto; background:var(--card); border-radius:var(--radius);
     padding:clamp(10px,1.6vmin,16px) clamp(14px,2vmin,22px);
@@ -134,7 +134,7 @@
     box-shadow:0 2px 0 rgba(43,50,67,.06);
   }
   #strip > span{display:inline;} /* single flex item so inter-word spaces survive */
-  #strip .cA{color:var(--sets);} #strip .cB{color:var(--objects);} #strip .cR{color:var(--result);}
+  #strip .cA{color:var(--sets);} #strip .cB{color:var(--objects);} #strip .cR{color:var(--result);} #strip .cN{color:#E0524D;}
 
   #keys{
     flex:0 0 auto; display:grid;
@@ -199,7 +199,7 @@
         <button class="opBtn" data-op="+"><span class="sym" style="color:var(--result)">+</span> plus</button>
         <button class="opBtn" data-op="*"><span class="sym" style="color:var(--sets)">×</span> times</button>
         <button class="opBtn" data-op="-"><span class="sym" style="color:#E0524D">−</span> minus</button>
-        <button class="opBtn lockBtn" data-op="/"><span class="sym">🔒</span> divide</button>
+        <button class="opBtn" data-op="/"><span class="sym" style="color:var(--objects)">÷</span> divide</button>
       </div>
       <div id="strip">Tap a number to make some dots!</div>
     </div>
@@ -219,7 +219,9 @@
     sets: CSS.getPropertyValue('--sets').trim(),
     setsSoft: CSS.getPropertyValue('--sets-soft').trim(),
     objects: CSS.getPropertyValue('--objects').trim(),
+    objectsSoft: CSS.getPropertyValue('--objects-soft').trim(),
     result: CSS.getPropertyValue('--result').trim(),
+    resultSoft: CSS.getPropertyValue('--result-soft').trim(),
     ink: CSS.getPropertyValue('--ink').trim(),
     inkSoft: CSS.getPropertyValue('--ink-soft').trim(),
     cross:'#E0524D'
@@ -257,8 +259,8 @@
     op:     () => { tone(440, .08, 0, 'triangle'); tone(587, .1, .07, 'triangle'); },
     swap:   () => { tone(523, .07, 0, 'triangle'); tone(392, .09, .08, 'triangle'); },
     result: () => { tone(523, .1, 0); tone(659, .1, .09); tone(784, .16, .18); },
+    below:  () => { tone(392, .1, 0); tone(311, .1, .1); tone(233, .18, .2); },
     reset:  () => { tone(494, .07, 0, 'triangle'); tone(370, .07, .07, 'triangle'); tone(262, .12, .14, 'triangle'); },
-    locked: () => tone(165, .16, 0, 'square', .1),
     nope:   () => { tone(233, .12, 0, 'sawtooth', .08); tone(196, .18, .1, 'sawtooth', .08); }
   };
   const soundBtn = document.getElementById('soundBtn');
@@ -310,21 +312,11 @@
 
   document.getElementById('ops').addEventListener('click', e => {
     const b = e.target.closest('.opBtn'); if(!b) return;
-    const op = b.dataset.op;
-    if(op === '/'){ lockedFlash(); return; }
     if(state.a === '') state.a = '0';
-    state.op = op;
+    state.op = b.dataset.op;
     sfx.op();
     render();
   });
-
-  let lockTimer;
-  function lockedFlash(){
-    setStrip('🔒 Dividing is <b>coming soon</b>!');
-    sfx.locked();
-    clearTimeout(lockTimer);
-    lockTimer = setTimeout(render, 2200);
-  }
 
   swapBtn.addEventListener('click', () => {
     if(state.a === '' && state.b === '') return;
@@ -347,39 +339,47 @@
   function num(s){ return s === '' ? null : parseInt(s,10); }
 
   function render(){
-    clearTimeout(lockTimer);
     const a = num(state.a), b = num(state.b), op = state.op;
 
     setChip(chipA,'a', a===null ? null : fmt(a));
     setChip(chipOp,'opchip', op ? OP_SYM[op] : null, '·');
     setChip(chipB,'b', b===null ? null : fmt(b));
 
-    let result = null, sentence = '';
+    let result = null, rem = 0, sentence = '';
     if(a !== null && op && b !== null){
       if(op==='+'){ result = a+b;
         sentence = `<span class="cA">${fmt(a)}</span> and <span class="cB">${fmt(b)}</span> together make <span class="cR">${fmt(result)}</span>!`; }
       if(op==='*'){ result = a*b;
         sentence = `<span class="cA">${fmt(a)} ${a===1?'set':'sets'}</span> of <span class="cB">${fmt(b)}</span> makes <span class="cR">${fmt(result)}</span>!`; }
-      if(op==='-'){
-        if(b > a){ result = null;
-          sentence = `You only have <span class="cA">${fmt(a)}</span> — you can't take away <span class="cB">${fmt(b)}</span>!`; }
-        else { result = a-b;
-          sentence = `Start with <span class="cA">${fmt(a)}</span>, take away <span class="cB">${fmt(b)}</span> — <span class="cR">${fmt(result)}</span> left!`; }
+      if(op==='-'){ result = a-b;
+        sentence = result >= 0
+          ? `Start with <span class="cA">${fmt(a)}</span>, take away <span class="cB">${fmt(b)}</span> — <span class="cR">${fmt(result)}</span> left!`
+          : `Take away <span class="cB">${fmt(b)}</span> from <span class="cA">${fmt(a)}</span>? You run out — that's <span class="cN">${fmt(-result)} below zero</span>!`;
+      }
+      if(op==='/'){
+        if(b === 0){ result = null;
+          sentence = `You can't share <span class="cA">${fmt(a)}</span> into <b>zero</b> boxes! 🤯`; }
+        else { result = Math.floor(a/b); rem = a % b;
+          sentence = `Share <span class="cA">${fmt(a)}</span> into <span class="cB">${fmt(b)} ${b===1?'box':'boxes'}</span> — <span class="cR">${fmt(result)}</span> in each` +
+                     (rem ? `, <span class="cA">${fmt(rem)}</span> left over!` : `!`);
+        }
       }
     } else if(a !== null && op){
       sentence = op==='*' ? `<span class="cA">${fmt(a)} ${a===1?'set':'sets'}</span> of… how many?`
+               : op==='/' ? `Share <span class="cA">${fmt(a)}</span> into… how many boxes?`
                : `<span class="cA">${fmt(a)}</span> ${OP_SYM[op]} … pick another number!`;
     } else if(a !== null){
-      sentence = `That's <span class="cA">${fmt(a)}</span> ${a===1?'dot':'dots'}! Now pick <b>plus</b>, <b>minus</b>, or <b>times</b>.`;
+      sentence = `That's <span class="cA">${fmt(a)}</span> ${a===1?'dot':'dots'}! Now pick <b>plus</b>, <b>minus</b>, <b>times</b>, or <b>divide</b>.`;
     } else {
       sentence = 'Tap a number to make some dots!';
     }
 
-    const resText = result===null ? null : fmt(result);
-    const resultChanged = setChip(chipR,'res', resText);
-    if(resultChanged && resText !== null) sfx.result();
-    if(op==='-' && a!==null && b!==null && b>a && lastNope !== state.a+'-'+state.b){
-      sfx.nope(); lastNope = state.a+'-'+state.b;
+    const neg = result !== null && result < 0;
+    const resText = result===null ? null : (neg ? '−'+fmt(-result) : fmt(result));
+    const resultChanged = setChip(chipR, neg ? 'res neg' : 'res', resText);
+    if(resultChanged && resText !== null){ neg ? sfx.below() : sfx.result(); }
+    if(op==='/' && a!==null && b===0 && lastNope !== state.a+'/0'){
+      sfx.nope(); lastNope = state.a+'/0';
     }
     setStrip(sentence);
     swapBtn.disabled = !(a !== null && b !== null);
@@ -394,7 +394,7 @@
     keysEl.classList.toggle('ghost', full);
     opsEl.classList.toggle('nudge', full && !state.op);
 
-    draw(a, op, b, result);
+    draw(a, op, b, result, rem);
   }
   let lastNope = '';
 
@@ -425,7 +425,7 @@
   window.addEventListener('resize', () => render());
 
   let animToken = 0;
-  function draw(a, op, b, result){
+  function draw(a, op, b, result, rem){
     const {w,h} = sizeCanvas();
     ctx.clearRect(0,0,w,h);
     vizMsg.classList.remove('show');
@@ -438,8 +438,13 @@
 
     if(op === '*' && b !== null){ drawTimes(a, b, box); return; }
     if(op === '+' && b !== null){ drawDots(box, [{n:a, color:C.sets},{n:b, color:C.objects}]); return; }
+    if(op === '/' && b !== null){
+      if(b === 0){ bigMessage('🤯', 'Zero boxes? Nowhere to put them!'); drawDots(box, [{n:a, color:C.sets}]); return; }
+      drawDivide(a, b, result, rem, box);
+      return;
+    }
     if(op === '-' && b !== null){
-      if(b > a){ bigMessage(`🙈`, `You only have ${fmt(a)}!`); drawDots(box, [{n:a, color:C.sets}]); return; }
+      if(b > a){ drawBelowZero(a, b, box); return; }
       drawDots(box, [{n:a-b, color:C.sets},{n:b, color:C.objects, crossed:true}]);
       if(a - b === 0 && a > 0) bigMessage('🫧', 'All gone!');
       return;
@@ -547,67 +552,143 @@
     banner(box, `${fmt(total)} dots — so tiny they look like sand!`);
   }
 
-  // Multiplication: a set-boxes each holding b dots
+  // Multiplication: a set-boxes (orange) each holding b dots (blue)
   function drawTimes(a, b, box){
-    if(a===0 || b===0){
-      if(a===0){ bigMessage('🫧','Zero sets means zero dots!'); return; }
-      // a sets of 0: draw empty boxes
+    if(a===0){ bigMessage('🫧','Zero sets means zero dots!'); return; }
+    drawSetBoxes(a, b, box, {stroke:C.sets, fill:C.setsSoft, dot:C.objects}, a*b);
+  }
+
+  // Division: share a dots into b boxes (blue boxes, orange dots), leftovers below
+  function drawDivide(a, b, q, rem, box){
+    let main = box;
+    if(rem > 0){
+      const bandH = Math.max(52, Math.min(box.h*0.2, 100));
+      main = {x:box.x, y:box.y, w:box.w, h:box.h - bandH - 10};
+      drawLeftovers({x:box.x, y:box.y + box.h - bandH, w:box.w, h:bandH}, rem);
     }
+    drawSetBoxes(b, q, main, {stroke:C.objects, fill:C.objectsSoft, dot:C.sets}, a - rem, true);
+    if(a === 0) bigMessage('🫧', 'Zero dots — every box is empty!');
+  }
+
+  function drawLeftovers(band, rem){
+    // divider
+    ctx.strokeStyle = '#E1E6EF'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(band.x, band.y - 5); ctx.lineTo(band.x + band.w, band.y - 5); ctx.stroke();
+    // label
+    ctx.fillStyle = C.inkSoft;
+    ctx.font = `600 ${Math.min(18, band.h*0.3)}px Fredoka, sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const label = 'left over:';
+    ctx.fillText(label, band.x + 6, band.y + band.h/2);
+    const labelW = ctx.measureText(label).width + 20;
+    // leftover dots (they're a's dots — orange)
+    const area = {x:band.x + labelW, y:band.y + 4, w:band.w - labelW - 6, h:band.h - 8};
+    const g = gridFit(rem, area.w, area.h);
+    const r = Math.max(0.8, g.cell*0.36);
+    const ox = area.x, oy = area.y + (area.h - g.rows*g.cell)/2;
+    ctx.fillStyle = C.sets;
+    for(let i=0;i<rem;i++){
+      ctx.beginPath();
+      ctx.arc(ox + (i%g.cols)*g.cell + g.cell/2, oy + Math.floor(i/g.cols)*g.cell + g.cell/2, r, 0, 7);
+      ctx.fill();
+    }
+  }
+
+  // Subtraction below zero: ghosts above a dashed zero line, "owed" red dots beneath
+  function drawBelowZero(a, b, box){
+    const owed = b - a;
+    const lineY = box.y + box.h * (a > 0 ? 0.52 : 0.3);
+    if(a > 0){
+      drawDots({x:box.x, y:box.y, w:box.w, h:lineY - box.y - 12}, [{n:a, color:C.sets, crossed:true}]);
+    }
+    ctx.strokeStyle = C.inkSoft; ctx.lineWidth = 2.5;
+    ctx.setLineDash([10,8]);
+    ctx.beginPath(); ctx.moveTo(box.x+6, lineY); ctx.lineTo(box.x+box.w-6, lineY); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.inkSoft;
+    ctx.font = '600 16px Fredoka, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom'; ctx.fillText('0', box.x+8, lineY-5);
+    ctx.textBaseline = 'top';    ctx.fillText('below zero', box.x+8, lineY+7);
+    drawDots({x:box.x, y:lineY+14, w:box.w, h:box.y+box.h-lineY-14}, [{n:owed, color:C.cross}]);
+  }
+
+  // Generic: n boxes each holding `per` dots.
+  // hlAnswer: repaint box 0 in result-green with a count badge once all boxes land.
+  function drawSetBoxes(n, per, box, colors, totalDots, hlAnswer){
     const gap = Math.max(6, Math.min(box.w,box.h)*0.015);
-    const g = gridFit(a, box.w, box.h);
+    const g = gridFit(n, box.w, box.h);
     const setSize = g.cell - gap;
-    if(setSize < 7){ // way too many sets to show as boxes
-      drawDenseField(box, [{n:a*b, color:C.objects}], a*b);
+    if(setSize < 7){ // way too many boxes to draw as boxes
+      drawDenseField(box, [{n:Math.max(totalDots, n), color:colors.dot}], Math.max(totalDots, n));
       return;
     }
     const ox = box.x + (box.w - g.cols*g.cell)/2;
     const oy = box.y + (box.h - g.rows*g.cell)/2;
 
-    // dots inside one set
     const innerPad = setSize*0.12;
     const inner = setSize - innerPad*2;
-    const dg = gridFit(b, inner, inner);
+    const dg = gridFit(per, inner, inner);
     const dr = dg.cell*0.36;
-    const drawInnerDots = dr >= 1.0 && b>0;
+    const drawInnerDots = dr >= 1.0 && per>0;
 
     const token = animToken;
-    const animate = !reduceMotion && a <= 60 && a*b <= 400;
+    const animate = !reduceMotion && n <= 60 && n*per <= 400;
     let i = 0;
-    const batch = animate ? Math.max(1, Math.ceil(a/16)) : a;
+    const batch = animate ? Math.max(1, Math.ceil(n/16)) : n;
 
-    function drawSet(idx){
+    function drawSet(idx, c){
       const sx = ox + (idx % g.cols)*g.cell + gap/2;
       const sy = oy + Math.floor(idx/g.cols)*g.cell + gap/2;
-      // set box (first-number color)
-      ctx.fillStyle = C.setsSoft;
-      ctx.strokeStyle = C.sets;
-      ctx.lineWidth = Math.max(1.5, setSize*0.045);
+      ctx.fillStyle = c.fill;
+      ctx.strokeStyle = c.stroke;
+      ctx.lineWidth = Math.max(1.5, setSize*0.045) * (c.thick ? 1.5 : 1);
       roundRect(sx, sy, setSize, setSize, Math.min(10, setSize*0.18));
       ctx.fill(); ctx.stroke();
       if(drawInnerDots){
         const ix = sx + innerPad + (inner - dg.cols*dg.cell)/2;
         const iy = sy + innerPad + (inner - dg.rows*dg.cell)/2;
-        ctx.fillStyle = C.objects;
-        for(let d=0; d<b; d++){
+        ctx.fillStyle = c.dot;
+        for(let d=0; d<per; d++){
           ctx.beginPath();
           ctx.arc(ix + (d%dg.cols)*dg.cell + dg.cell/2, iy + Math.floor(d/dg.cols)*dg.cell + dg.cell/2, dr, 0, 7);
           ctx.fill();
         }
-      } else if(b>0){
-        // too small for dots: solid blue fill hint
-        ctx.fillStyle = C.objects;
+      } else if(per>0){
+        ctx.fillStyle = c.dot;
         ctx.globalAlpha = .55;
         roundRect(sx+innerPad, sy+innerPad, inner, inner, Math.min(6, inner*0.2));
         ctx.fill();
         ctx.globalAlpha = 1;
       }
+      return {sx, sy};
+    }
+    // The "answer box": box 0 repainted result-green with a count badge, so the
+    // green chip has a green thing on screen to point at.
+    function drawAnswerBox(){
+      const {sx, sy} = drawSet(0, {stroke:C.result, fill:C.resultSoft, dot:C.result, thick:true});
+      if(setSize < 34) return; // too small for a readable badge
+      const label = fmt(per);
+      ctx.font = `700 ${Math.max(12, Math.min(20, setSize*0.26))}px Fredoka, sans-serif`;
+      const tw = ctx.measureText(label).width;
+      const ph = Math.max(20, Math.min(28, setSize*0.3));
+      const pw = Math.max(ph, tw + 14);
+      const px = sx + setSize - pw*0.62, py = sy - ph*0.42;
+      ctx.fillStyle = C.result;
+      roundRect(px, py, pw, ph, ph/2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, px + pw/2, py + ph/2 + 1);
     }
     function step(){
       if(token !== animToken) return;
-      const end = Math.min(a, i+batch);
-      for(; i<end; i++) drawSet(i);
-      if(i < a) requestAnimationFrame(step);
-      else if(!drawInnerDots && b>0) banner(box, `${fmt(a*b)} dots — too many to draw one by one!`);
+      const end = Math.min(n, i+batch);
+      for(; i<end; i++) drawSet(i, colors);
+      if(i < n) requestAnimationFrame(step);
+      else {
+        if(hlAnswer && n > 0) drawAnswerBox();
+        if(!drawInnerDots && per>0) banner(box, `${fmt(n*per)} dots — too many to draw one by one!`);
+      }
     }
     step();
   }
